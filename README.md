@@ -13,11 +13,10 @@ This is for those Daigler "drag and drop into text" (ddwtos) questions. Instead 
 
 
 
+
 ## Demo
 
-- [▶️ Watch the Demo Video on YouTube](https://www.youtube.com/shorts/B3t5UZh353o)
-- [Or watch on Google Drive](https://drive.google.com/file/d/1bMA_3e9RT_wSRbySjCAC4DTgDiPUtX2C/view?usp=sharing)
-
+[![DEMO](https://img.youtube.com/vi/B3t5UZh353o/hqdefault.jpg)](https://www.youtube.com/shorts/B3t5UZh353o)
 
 
 ## Installation
