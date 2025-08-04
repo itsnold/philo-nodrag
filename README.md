@@ -12,10 +12,11 @@ This is an extension that fixes the super annoying drag-and-drop design in Daigl
 This is for those Daigler "drag and drop into text" (ddwtos) questions. Instead of dragging, you just type and pick.
 
 
+
 ## Demo
 
-
-[Demo](https://drive.google.com/file/d/1bMA_3e9RT_wSRbySjCAC4DTgDiPUtX2C/view?usp=sharing)
+- [▶️ Watch the Demo Video on YouTube](https://www.youtube.com/shorts/B3t5UZh353o)
+- [Or watch on Google Drive](https://drive.google.com/file/d/1bMA_3e9RT_wSRbySjCAC4DTgDiPUtX2C/view?usp=sharing)
 
 
 
