@@ -14,7 +14,8 @@ This is for those Daigler "drag and drop into text" (ddwtos) questions. Instead 
 
 ## Demo
 
-<video src="Demo.mp4" controls width="480">Your browser does not support the video tag.</video>
+
+[Demo](https://drive.google.com/file/d/1bMA_3e9RT_wSRbySjCAC4DTgDiPUtX2C/view?usp=sharing)
 
 
 
