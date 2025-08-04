@@ -12,12 +12,19 @@ This is an extension that fixes the super annoying drag-and-drop design in Daigl
 This is for those Daigler "drag and drop into text" (ddwtos) questions. Instead of dragging, you just type and pick.
 
 
+## Demo
+
+<video src="Demo.mp4" controls width="480">Your browser does not support the video tag.</video>
+
+
+
 ## Installation
 
-1. Download this repo and extract it
-2. Open Chrome and go to `chrome://extensions/`
-3. Turn on "Developer mode"
-4. Click "Load unpacked" and pick this folder
+1. Download the latest release zip from the [GitHub Releases page](https://github.com/itsnold/philo-nodrag/releases)
+2. Extract the zip file
+3. Open Chrome and go to `chrome://extensions/`
+4. Turn on "Developer mode"
+5. Click "Load unpacked" and pick this folder
 5. Go to any Daigler drag-and-drop question
 6. A green modal will automatically appear in the top-right corner
 7. Click "🎯 Enable Type-to-Fill" to activate the interface
