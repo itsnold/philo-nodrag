@@ -16,7 +16,7 @@ This is for those Daigler "drag and drop into text" (ddwtos) questions. Instead 
 
 ## Demo
 
-[![DEMO](https://img.youtube.com/vi/B3t5UZh353o/hqdefault.jpg)](https://www.youtube.com/shorts/B3t5UZh353o)
+![Demo in action](Demo.gif)
 
 
 ## Installation
