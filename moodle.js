@@ -8,10 +8,15 @@
 
 
     function createPhiloNoDragModal() {
-        const ddwtosQuestions = document.querySelectorAll('.que.ddwtos');
-        if (ddwtosQuestions.length === 0) {
-            console.log('❌ No drag-and-drop questions found on this page.');
-            return;
+        // Always allow the modal on attempt/review pages; don't require ddwtos to be present
+        const isAttempt = /\/mod\/quiz\/attempt\.php/.test(location.pathname);
+        const isReview = /\/mod\/quiz\/review\.php/.test(location.pathname);
+        if (!isAttempt && !isReview) {
+            const ddwtosQuestions = document.querySelectorAll('.que.ddwtos');
+            if (ddwtosQuestions.length === 0) {
+                console.log('❌ Not a quiz attempt/review page and no ddwtos found.');
+                return;
+            }
         }
 
         // only one modal at a time
@@ -101,7 +106,9 @@
         `;
 
         const desc = document.createElement('div');
-        desc.textContent = 'Type-to-Fill for Daigler drag-and-drop questions';
+        desc.textContent = isReview
+            ? 'Save answers from this review to auto-fill later'
+            : 'Type-to-Fill for Daigler drag-and-drop questions';
         desc.style.cssText = `
             font-size: 14px;
             text-align: center;
@@ -110,12 +117,63 @@
         `;
         content.appendChild(desc);
 
-        // enable button (no disable option - just refresh to restore)
-        const enableBtn = document.createElement('button');
-        enableBtn.className = 'philo-nodrag-enable-btn';
-        enableBtn.innerHTML = '🎯 Enable Type-to-Fill';
-        enableBtn.style.cssText = `
-            background: #4CAF50;
+        // Container for dynamic controls
+        const controls = document.createElement('div');
+        controls.style.cssText = 'display: flex; flex-direction: column; gap: 8px; width: 100%;';
+
+        // Type-to-Fill button (attempt pages only; still shown if ddwtos exists)
+        if (isAttempt) {
+            const enableBtn = document.createElement('button');
+            enableBtn.className = 'philo-nodrag-enable-btn';
+            enableBtn.innerHTML = '🎯 Enable Type-to-Fill';
+            enableBtn.style.cssText = `
+                background: #4CAF50;
+                color: white;
+                border: none;
+                padding: 12px 20px;
+                border-radius: 6px;
+                font-size: 14px;
+                font-weight: bold;
+                cursor: pointer;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                transition: all 0.3s ease;
+                width: 100%;
+            `;
+            enableBtn.addEventListener('mouseenter', () => { if (!interfaceActive) enableBtn.style.background = '#45a049'; });
+            enableBtn.addEventListener('mouseleave', () => { if (!interfaceActive) enableBtn.style.background = '#4CAF50'; });
+            enableBtn.addEventListener('click', () => {
+                if (!interfaceActive) {
+                    enableBtn.innerHTML = '🔄 Loading...';
+                    enableBtn.style.background = '#ff9800';
+                    typeToFillInstance = new TypeToFillInterface();
+                    window.typeToFillInterface = typeToFillInstance;
+                    setTimeout(() => {
+                        enableBtn.innerHTML = '✅ Type-to-Fill Active!';
+                        enableBtn.style.background = '#28a745';
+                        enableBtn.disabled = true;
+                        enableBtn.style.cursor = 'not-allowed';
+                        interfaceActive = true;
+                        const refreshNote = document.createElement('div');
+                        refreshNote.style.cssText = `
+                            margin-top: 6px;
+                            font-size: 12px;
+                            color: #666;
+                            text-align: center;
+                            line-height: 1.4;
+                        `;
+                        refreshNote.innerHTML = '💡 Refresh the page to return to the original drag interface';
+                        controls.appendChild(refreshNote);
+                    }, 800);
+                }
+            });
+            controls.appendChild(enableBtn);
+        }
+
+        // Save/Fill answers buttons
+        const saveBtn = document.createElement('button');
+        saveBtn.innerHTML = isReview ? '💾 Save Answers from Review' : '⚡ Auto-Fill Saved Answers';
+        saveBtn.style.cssText = `
+            background: ${isReview ? '#1976d2' : '#9c27b0'};
             color: white;
             border: none;
             padding: 12px 20px;
@@ -127,42 +185,23 @@
             transition: all 0.3s ease;
             width: 100%;
         `;
-
-        enableBtn.addEventListener('mouseenter', () => {
-            if (!interfaceActive) enableBtn.style.background = '#45a049';
-        });
-        enableBtn.addEventListener('mouseleave', () => {
-            if (!interfaceActive) enableBtn.style.background = '#4CAF50';
-        });
-
-        enableBtn.addEventListener('click', () => {
-            if (!interfaceActive) {
-                enableBtn.innerHTML = '🔄 Loading...';
-                enableBtn.style.background = '#ff9800';
-                typeToFillInstance = new TypeToFillInterface();
-                window.typeToFillInterface = typeToFillInstance;
-                setTimeout(() => {
-                    enableBtn.innerHTML = '✅ Type-to-Fill Active!';
-                    enableBtn.style.background = '#28a745';
-                    enableBtn.disabled = true;
-                    enableBtn.style.cursor = 'not-allowed';
-                    interfaceActive = true;
-                    
-                    // add refresh instruction
-                    const refreshNote = document.createElement('div');
-                    refreshNote.style.cssText = `
-                        margin-top: 10px;
-                        font-size: 12px;
-                        color: #666;
-                        text-align: center;
-                        line-height: 1.4;
-                    `;
-                    refreshNote.innerHTML = '💡 Refresh the page to return to original drag interface';
-                    content.appendChild(refreshNote);
-                }, 1000);
+        saveBtn.addEventListener('click', async () => {
+            try {
+                if (isReview) {
+                    await PND_saveAnswersFromCurrentPage();
+                    PND_toast('✅ Answers saved for this attempt');
+                } else {
+                    const filled = await PND_autoFillSavedAnswers(true);
+                    PND_toast(filled > 0 ? `✅ Auto-filled ${filled} question(s)` : 'ℹ️ No saved answers found');
+                }
+            } catch (e) {
+                console.error(e);
+                PND_toast('❌ Failed. Check the console for details.');
             }
         });
-        content.appendChild(enableBtn);
+        controls.appendChild(saveBtn);
+
+        content.appendChild(controls);
         modal.appendChild(content);
 
         // Make draggable
@@ -776,6 +815,360 @@
             }, 4000);
         }
     }
+
+    // ---------- Saved answers (review -> attempt) ----------
+    function PND_getAttemptId() {
+        const params = new URLSearchParams(location.search);
+        const attempt = params.get('attempt');
+        if (attempt) return attempt;
+        // Fallback: try to find attempt param from forms
+        const inp = document.querySelector('input[name="attempt"]');
+        return inp ? inp.value : null;
+    }
+
+    function PND_cssEscape(value) {
+        // Minimal CSS escape for attribute selectors
+        return value.replace(/([\[\]().:+*?^$|\\])/g, '\\$1');
+    }
+
+    function PND_toast(message) {
+        const existing = document.getElementById('pnd-toast');
+        if (existing) existing.remove();
+        const el = document.createElement('div');
+        el.id = 'pnd-toast';
+        el.style.cssText = `
+            position: fixed; bottom: 20px; right: 20px; z-index: 10000;
+            background: rgba(0,0,0,0.85); color: #fff; padding: 10px 14px; border-radius: 6px;
+            font-size: 13px; box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+        `;
+        el.textContent = message;
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 2500);
+    }
+
+    async function PND_storageLoad() {
+        try {
+            if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+                return new Promise(resolve => {
+                    chrome.storage.local.get(['PND_savedAnswers','PND_savedTemplates'], data => {
+                        resolve({
+                            savedAnswers: data.PND_savedAnswers || {},
+                            savedTemplates: data.PND_savedTemplates || {}
+                        });
+                    });
+                });
+            }
+        } catch (_) {}
+        try {
+            const rawA = localStorage.getItem('PND_savedAnswers');
+            const rawT = localStorage.getItem('PND_savedTemplates');
+            return { savedAnswers: rawA ? JSON.parse(rawA) : {}, savedTemplates: rawT ? JSON.parse(rawT) : {} };
+        } catch (_) { return { savedAnswers: {}, savedTemplates: {} }; }
+    }
+
+    async function PND_storageSave(all) {
+        try {
+            if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+                return new Promise(resolve => {
+                    chrome.storage.local.set({ PND_savedAnswers: all }, () => resolve());
+                });
+            }
+        } catch (_) {}
+        try {
+            localStorage.setItem('PND_savedAnswers', JSON.stringify(all));
+        } catch (_) {}
+    }
+
+    async function PND_templateSave(templates) {
+        try {
+            if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+                return new Promise(resolve => {
+                    chrome.storage.local.set({ PND_savedTemplates: templates }, () => resolve());
+                });
+            }
+        } catch (_) {}
+        try { localStorage.setItem('PND_savedTemplates', JSON.stringify(templates)); } catch (_) {}
+    }
+
+    function PND_detectQuestionType(q) {
+        const cls = q.className || '';
+        if (cls.includes('ddwtos')) return 'ddwtos';
+        if (cls.includes('ddmatch')) return 'ddmatch';
+        if (cls.includes('ddimageortext')) return 'ddimageortext';
+        if (cls.includes('multichoice')) return 'multichoice';
+        if (cls.includes('truefalse')) return 'truefalse';
+        if (cls.includes('shortanswer')) return 'shortanswer';
+        return 'generic';
+    }
+
+    function PND_extractFromQuestion(qEl, type) {
+        switch (type) {
+            case 'ddwtos':
+            case 'ddimageortext': {
+                const byId = {};
+                qEl.querySelectorAll('input.placeinput').forEach(inp => { byId[inp.id] = inp.value; });
+                // Fallback for review displays with no inputs: scan placed drags by classes
+                const places = {};
+                qEl.querySelectorAll('.draghome').forEach(drag => {
+                    const cls = drag.className || '';
+                    const pm = cls.match(/inplace(\d+)/);
+                    const cm = cls.match(/choice(\d+)/);
+                    if (pm && cm) places[pm[1]] = cm[1];
+                });
+                return { placeInputs: byId, places };
+            }
+            case 'ddmatch': {
+                const map = {};
+                qEl.querySelectorAll('select').forEach(sel => {
+                    if (sel.name) map[sel.name] = sel.value;
+                });
+                // Fallback: derive by place -> choice from placed drags in review
+                const places = {};
+                qEl.querySelectorAll('ul.drop').forEach(ul => {
+                    const cls = ul.className || '';
+                    const m = cls.match(/place(\d+)/);
+                    const placeNum = m ? m[1] : null;
+                    if (!placeNum) return;
+                    const placed = qEl.querySelector(`li.draghome.inplace${placeNum}`) || ul.querySelector('li.draghome');
+                    if (placed) {
+                        const mc = placed.className.match(/choice(\d+)/);
+                        if (mc) places[placeNum] = mc[1];
+                    }
+                });
+                return { selects: map, places };
+            }
+            case 'multichoice':
+            case 'truefalse': {
+                const checked = qEl.querySelector('.answer input[type="radio"]:checked');
+                if (!checked) return { radios: null };
+                return { radios: { name: checked.name, value: checked.value } };
+            }
+            case 'shortanswer': {
+                const inp = qEl.querySelector('input[type="text"]');
+                return { text: inp ? { name: inp.name, value: inp.value } : null };
+            }
+            default: {
+                // Generic: capture text inputs and textareas under the question
+                const inputs = [];
+                qEl.querySelectorAll('input[type="text"], textarea').forEach(el => {
+                    if (el.name) inputs.push({ name: el.name, value: el.value, tag: el.tagName.toLowerCase() });
+                });
+                return { inputs };
+            }
+        }
+    }
+
+    function PND_simpleHash(str) {
+        let h = 0; if (!str) return '0';
+        for (let i = 0; i < str.length; i++) { h = ((h << 5) - h) + str.charCodeAt(i); h |= 0; }
+        return String(h);
+    }
+
+    function PND_getQuestionId(qEl, index) {
+        const qid = qEl.getAttribute('data-questionid');
+        if (qid) return `qid:${qid}`;
+        const id = qEl.id ? `id:${qEl.id}` : null;
+        if (id) return id;
+        const qtextEl = qEl.querySelector('.qtext');
+        const textKey = qtextEl ? qtextEl.textContent.trim().replace(/\s+/g, ' ').slice(0, 500) : qEl.textContent.trim().slice(0, 500);
+        return `hash:${PND_simpleHash(textKey)}`;
+    }
+
+    function PND_getQuizKey() {
+        const heading = document.querySelector('#page-header .page-header-headings h1, h1');
+        const title = heading ? heading.textContent.trim() : document.title.trim();
+        // normalize path to quiz module root
+        const path = location.pathname.replace(/\/(attempt|review)\.php.*/, '/mod/quiz');
+        return `${location.origin}${path}::${title}`;
+    }
+
+    async function PND_saveAnswersFromCurrentPage() {
+        const attemptId = PND_getAttemptId();
+        const { savedAnswers, savedTemplates } = await PND_storageLoad();
+        if (!attemptId) console.warn('PND: No attempt id; will save to template only');
+        if (attemptId && !savedAnswers[attemptId]) savedAnswers[attemptId] = { savedAt: Date.now(), questions: [] };
+
+        const qNodes = Array.from(document.querySelectorAll('.que'));
+        const byId = new Map();
+        if (attemptId && savedAnswers[attemptId] && Array.isArray(savedAnswers[attemptId].questions)) {
+            savedAnswers[attemptId].questions.forEach(q => byId.set(q.key, q));
+        }
+
+        qNodes.forEach((qEl, idx) => {
+            const key = PND_getQuestionId(qEl, idx);
+            const type = PND_detectQuestionType(qEl);
+            const data = PND_extractFromQuestion(qEl, type);
+            const entry = { key, index: idx, type, data };
+            byId.set(key, entry);
+        });
+
+        // reassemble in DOM order by current page first, then previous preserved order (double check this later)
+        const mergedKeys = new Set(Array.from(byId.keys()));
+        const merged = [];
+        qNodes.forEach((qEl, idx) => { const key = PND_getQuestionId(qEl, idx); merged.push(byId.get(key)); mergedKeys.delete(key); });
+        const prevQuestions = attemptId && savedAnswers[attemptId] && Array.isArray(savedAnswers[attemptId].questions)
+            ? savedAnswers[attemptId].questions
+            : [];
+        prevQuestions.forEach(q => { if (mergedKeys.has(q.key)) merged.push(q); });
+
+        const now = Date.now();
+        const quizKey = PND_getQuizKey();
+        // save per-attempt (if available)
+        if (attemptId) {
+            savedAnswers[attemptId] = { savedAt: now, questions: merged };
+            await PND_storageSave(savedAnswers);
+        }
+        // save/update template for this quiz (for reuse across attempts)
+        savedTemplates[quizKey] = { savedAt: now, questions: merged };
+        await PND_templateSave(savedTemplates);
+    }
+
+    function PND_fill_dd_inputs(qEl, map) {
+        let filled = 0;
+        Object.entries(map).forEach(([id, val]) => {
+            const inp = document.getElementById(id);
+            if (inp) {
+                inp.value = String(val);
+                inp.dispatchEvent(new Event('change', { bubbles: true }));
+                filled++;
+                // if Type-to-Fill UI exists, mirror text for convenience
+                const placeMatch = id.match(/place(\d+)/);
+                if (placeMatch) {
+                    const placeNum = placeMatch[1];
+                    const container = qEl.querySelector(`.type-to-fill-container[data-place="${placeNum}"]`);
+                    if (container) {
+                        const input = container.querySelector('input.type-to-fill-input');
+                        const choiceTextEl = qEl.querySelector(`.draghome.choice${val}`);
+                        if (input && choiceTextEl) input.value = choiceTextEl.textContent.trim();
+                    }
+                }
+            }
+        });
+        return filled;
+    }
+
+    function PND_fill_dd_places(qEl, places) {
+        let filled = 0;
+        Object.entries(places).forEach(([placeNum, choiceVal]) => {
+            const inp = qEl.querySelector(`input.placeinput.place${placeNum}`);
+            if (inp) {
+                inp.value = String(choiceVal);
+                inp.dispatchEvent(new Event('change', { bubbles: true }));
+                filled++;
+            }
+        });
+        return filled;
+    }
+
+    function PND_fill_ddmatch(qEl, selects) {
+        let filled = 0;
+        Object.entries(selects).forEach(([name, value]) => {
+            const sel = qEl.querySelector(`select[name="${PND_cssEscape(name)}"]`);
+            if (sel) {
+                sel.value = String(value);
+                sel.dispatchEvent(new Event('change', { bubbles: true }));
+                filled++;
+            }
+        });
+        return filled;
+    }
+
+    function PND_fill_multichoice(qEl, radios) {
+        if (!radios) return 0;
+        const el = qEl.querySelector(`.answer input[type="radio"][name="${PND_cssEscape(radios.name)}"][value="${PND_cssEscape(radios.value)}"]`);
+        if (el) {
+            el.checked = true;
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            return 1;
+        }
+        return 0;
+    }
+
+    function PND_fill_text(qEl, text) {
+        if (!text) return 0;
+        const el = qEl.querySelector(`input[type="text"][name="${PND_cssEscape(text.name)}"]`);
+        if (el) {
+            el.value = text.value || '';
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            return 1;
+        }
+        return 0;
+    }
+
+    function PND_fill_generic(qEl, inputs) {
+        let filled = 0;
+        (inputs || []).forEach(item => {
+            const selector = item.tag === 'textarea' ? `textarea[name="${PND_cssEscape(item.name)}"]` : `input[type="text"][name="${PND_cssEscape(item.name)}"]`;
+            const el = qEl.querySelector(selector);
+            if (el) {
+                el.value = item.value || '';
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+                filled++;
+            }
+        });
+        return filled;
+    }
+
+    async function PND_autoFillSavedAnswers(stopAtFirstNew) {
+        const attemptId = PND_getAttemptId();
+        if (!attemptId) return 0;
+        const { savedAnswers, savedTemplates } = await PND_storageLoad();
+        let saved = savedAnswers[attemptId];
+        if (!saved || !saved.questions || saved.questions.length === 0) {
+            // fallback to template by quiz key
+            const tpl = savedTemplates[PND_getQuizKey()];
+            if (!tpl || !tpl.questions) return 0;
+            saved = tpl;
+        }
+
+        const byKey = new Map(saved.questions.map(q => [q.key, q]));
+        const qNodes = Array.from(document.querySelectorAll('.que'));
+        let filledCount = 0;
+        for (let idx = 0; idx < qNodes.length; idx++) {
+            const qEl = qNodes[idx];
+            const key = PND_getQuestionId(qEl, idx);
+            const entry = byKey.get(key);
+            if (!entry) {
+                if (stopAtFirstNew) break;
+                continue;
+            }
+            let added = 0;
+            switch (entry.type) {
+                case 'ddwtos':
+                case 'ddimageortext': {
+                    const data = entry.data || {};
+                    added = PND_fill_dd_inputs(qEl, data.placeInputs || {});
+                    if (added === 0 && data.places) {
+                        added = PND_fill_dd_places(qEl, data.places);
+                    }
+                    break;
+                }
+                case 'ddmatch':
+                    added = PND_fill_ddmatch(qEl, (entry.data || {}).selects || {});
+                    break;
+                case 'multichoice':
+                case 'truefalse':
+                    added = PND_fill_multichoice(qEl, (entry.data || {}).radios || null);
+                    break;
+                case 'shortanswer':
+                    added = PND_fill_text(qEl, (entry.data || {}).text || null);
+                    break;
+                default:
+                    added = PND_fill_generic(qEl, (entry.data || {}).inputs || []);
+            }
+            filledCount += added > 0 ? 1 : 0;
+            if (!entry || added === 0) {
+                if (stopAtFirstNew) break;
+            }
+        }
+        return filledCount;
+    }
+
+    // Expose small API on window (debugging/useful for manual triggering)
+    window.PND_saveAnswersFromCurrentPage = PND_saveAnswersFromCurrentPage;
+    window.PND_autoFillSavedAnswers = PND_autoFillSavedAnswers;
 
     //auto open
     if (document.readyState === 'loading') {

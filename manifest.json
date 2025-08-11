@@ -6,7 +6,8 @@
   "permissions": [
     "scripting",
     "activeTab",
-    "webNavigation"
+    "webNavigation",
+    "storage"
   ],
   "host_permissions": [
     "*://*/question/type/ddwtos/*",
